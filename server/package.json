@@ -1,0 +1,33 @@
+{
+  "name": "sealcash",
+  "version": "1.0.0",
+  "description": "Trustless cross-chain escrow using Charms on Bitcoin",
+  "main": "dist/app.js",
+  "scripts": {
+    "dev": "bun --watch src/app.ts",
+    "build": "bun build src/app.ts --outdir dist --target bun",
+    "start": "bun dist/app.js"
+  },
+  "keywords": [
+    "charms",
+    "bitcoin",
+    "escrow",
+    "cross-chain"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@mysten/sui": "^1.45.2",
+    "@solana/web3.js": "^1.98.4",
+    "axios": "^1.7.0",
+    "bitcoinjs-message": "^2.2.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "mongoose": "^8.8.0",
+    "web3": "^4.16.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
