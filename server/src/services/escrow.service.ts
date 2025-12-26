@@ -47,6 +47,10 @@ export class EscrowService {
   }
 
   async createEscrow(buyerBtcAddress: string, data: CreateEscrowRequest) {
+    if (buyerBtcAddress === data.sellerBtcAddress) {
+      throw new Error('Buyer and seller cannot be the same address');
+    }
+
     const buyer = await UserModel.findOne({ 'addresses.bitcoin': buyerBtcAddress });
     if (!buyer) throw new Error('Buyer must be registered');
 

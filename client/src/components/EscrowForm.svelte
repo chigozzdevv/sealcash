@@ -25,6 +25,12 @@
 
   async function handleSubmit() {
     error = '';
+    
+    if (form.sellerBtcAddress === $wallet.address) {
+      error = 'Seller address cannot be the same as your wallet';
+      return;
+    }
+
     loading = true;
 
     try {

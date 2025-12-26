@@ -9,7 +9,7 @@ export async function connectWallet(): Promise<boolean> {
         payload: {
           purposes: [AddressPurpose.Payment],
           message: 'Connect to SealCash',
-          network: { type: BitcoinNetworkType.Testnet },
+          network: { type: BitcoinNetworkType.Testnet4 },
         },
         onFinish: resolve,
         onCancel: () => reject(new Error('User cancelled')),
@@ -26,7 +26,7 @@ export async function connectWallet(): Promise<boolean> {
         payload: {
           address,
           message: challenge,
-          network: { type: BitcoinNetworkType.Testnet },
+          network: { type: BitcoinNetworkType.Testnet4 },
         },
         onFinish: (res) => resolve(res),
         onCancel: () => reject(new Error('User cancelled signing')),
