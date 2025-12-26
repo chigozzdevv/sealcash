@@ -4,14 +4,13 @@
   import { api } from '@lib/api';
   import { escrows, type Escrow } from '@stores/escrow';
   import { wallet } from '@stores/wallet';
+  import { sendBtcTransaction, getWalletUtxos } from '@lib/wallet';
 
   let loading = true;
   let filter: 'all' | 'buyer' | 'seller' = 'all';
   let expandedId: string | null = null;
   let actionLoading = false;
 
-  // Form states for different actions
-  let lockForm = { fundingUtxo: '', fundingValue: '', prevTxHex: '', outputAddress: '', changeAddress: '' };
   let proofForm = { txHash: '' };
 
   const statusColors: Record<string, string> = {
@@ -50,21 +49,22 @@
     }
   }
 
-  async function handleLock(id: string) {
+  async function handleLock(escrowId: string) {
     actionLoading = true;
     try {
-      await api.escrow.lock(id, {
-        fundingUtxo: lockForm.fundingUtxo,
-        fundingValue: parseInt(lockForm.fundingValue),
-        prevTxHex: lockForm.prevTxHex,
-        outputAddress: lockForm.outputAddress,
-        changeAddress: lockForm.changeAddress,
-      });
-      lockForm = { fundingUtxo: '', fundingValue: '', prevTxHex: '', outputAddress: '', changeAddress: '' };
-      expandedId = null;
-      await loadEscrows();
+      const escrow = $escrows.find(e => e._id === escrowId);
+      if (!escrow) throw new Error('Escrow not found');
+
+      const amountSats = Math.floor(parseFloat(escrow.btcAmount) * 1e8);
+      
+      const txid = await sendBtcTransaction($wallet.address!, amountSats);
+      
+      if (txid) {
+        alert(`Transaction sent! TxID: ${txid}\n\nNote: Full Charms integration requires additional setup.`);
+        await loadEscrows();
+      }
     } catch (e: any) {
-      alert(e.message);
+      alert(e.message || 'Failed to lock BTC');
     } finally {
       actionLoading = false;
     }
@@ -174,34 +174,18 @@
                 {:else if escrow.status === 'accepted' && isBuyer(escrow)}
                   <div class="space-y-3">
                     <p class="text-sm text-[var(--muted)]">Seller accepted. Lock your BTC to proceed.</p>
-                    <input
-                      bind:value={lockForm.fundingUtxo}
-                      placeholder="Funding UTXO (txid:vout)"
-                      class="w-full px-3 py-2 bg-black/30 border border-[var(--border)] rounded-lg text-sm"
-                    />
-                    <input
-                      bind:value={lockForm.fundingValue}
-                      placeholder="Funding value (sats)"
-                      type="number"
-                      class="w-full px-3 py-2 bg-black/30 border border-[var(--border)] rounded-lg text-sm"
-                    />
-                    <input
-                      bind:value={lockForm.outputAddress}
-                      placeholder="Output address (Taproot)"
-                      class="w-full px-3 py-2 bg-black/30 border border-[var(--border)] rounded-lg text-sm"
-                    />
-                    <input
-                      bind:value={lockForm.changeAddress}
-                      placeholder="Change address"
-                      class="w-full px-3 py-2 bg-black/30 border border-[var(--border)] rounded-lg text-sm"
-                    />
+                    <div class="text-xs text-[var(--muted)] bg-black/30 p-2 rounded-lg">
+                      <p>Amount: {escrow.btcAmount} BTC</p>
+                      <p>To receive: {escrow.amount || escrow.tokenId} on {escrow.chain}</p>
+                    </div>
                     <button
                       on:click={() => handleLock(escrow._id)}
-                      disabled={actionLoading || !lockForm.fundingUtxo || !lockForm.fundingValue}
+                      disabled={actionLoading}
                       class="w-full px-4 py-2 bg-[var(--primary)] text-black text-sm font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
                     >
-                      {actionLoading ? 'Locking...' : 'Lock BTC'}
+                      {actionLoading ? 'Preparing transaction...' : `Lock ${escrow.btcAmount} BTC`}
                     </button>
+                    <p class="text-xs text-center text-[var(--muted)]">Your wallet will prompt you to sign the transaction</p>
                   </div>
 
                 <!-- Seller: Submit proof after BTC is locked -->

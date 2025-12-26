@@ -56,7 +56,7 @@
     class="relative p-2 text-[var(--muted)] hover:text-white transition-colors"
   >
     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
     </svg>
     {#if pendingEscrows.length > 0}
       <span class="absolute -top-1 -right-1 w-4 h-4 bg-[var(--primary)] text-black text-xs rounded-full flex items-center justify-center">

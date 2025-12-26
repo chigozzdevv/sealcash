@@ -1,4 +1,11 @@
-import { AddressPurpose, getAddress, signMessage, BitcoinNetworkType, type GetAddressResponse } from 'sats-connect';
+import {
+  AddressPurpose,
+  getAddress,
+  signMessage,
+  sendBtcTransaction as satsSendBtc,
+  BitcoinNetworkType,
+  type GetAddressResponse,
+} from 'sats-connect';
 import { wallet } from '@stores/wallet';
 import { api, setToken, clearToken } from './api';
 
@@ -52,4 +59,36 @@ export async function connectWallet(): Promise<boolean> {
 export function disconnectWallet() {
   clearToken();
   wallet.set({ connected: false, address: null, network: null });
+}
+
+export async function sendBtcTransaction(
+  recipientAddress: string,
+  amountSats: number
+): Promise<string | null> {
+  try {
+    const txid = await new Promise<string>((resolve, reject) => {
+      satsSendBtc({
+        payload: {
+          network: { type: BitcoinNetworkType.Testnet4 },
+          recipients: [
+            {
+              address: recipientAddress,
+              amountSats: BigInt(amountSats),
+            },
+          ],
+          senderAddress: recipientAddress,
+        },
+        onFinish: (response) => resolve(response.txid),
+        onCancel: () => reject(new Error('User cancelled transaction')),
+      });
+    });
+    return txid;
+  } catch (err) {
+    console.error('Send BTC failed:', err);
+    throw err;
+  }
+}
+
+export async function getWalletUtxos(): Promise<any[]> {
+  return [];
 }
