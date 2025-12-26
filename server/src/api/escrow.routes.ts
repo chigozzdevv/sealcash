@@ -6,6 +6,32 @@ const router = Router();
 const escrow = new EscrowService();
 const auth = new AuthService();
 
+// Public endpoint - get escrow details for invite page (no auth required)
+router.get('/invite/:id', async (req, res) => {
+  try {
+    const result = await escrow.getEscrow(req.params.id);
+    if (!result) return res.status(404).json({ error: 'Not found' });
+    // Return limited info for public view
+    res.json({
+      _id: result._id,
+      buyerId: result.buyerId,
+      sellerId: result.sellerId,
+      btcAmount: result.btcAmount,
+      assetType: result.assetType,
+      chain: result.chain,
+      contractAddress: result.contractAddress,
+      amount: result.amount,
+      tokenId: result.tokenId,
+      receiverAddress: result.receiverAddress,
+      timeout: result.timeout,
+      status: result.status,
+    });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// All other routes require auth
 router.use(auth.middleware());
 
 router.post('/create', async (req, res) => {

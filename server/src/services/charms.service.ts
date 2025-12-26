@@ -25,17 +25,35 @@ export interface Attestation {
   signature: string;
 }
 
+export interface SpellResult {
+  commitTx: string;
+  spellTx: string;
+}
+
+const SPELL_VERSION = 8;
+
 export class CharmsService {
-  private appBinary: string;
+  private appBinary: string | null = null;
   private proverApi = env.CHARMS_PROVER_API;
   private appVk = env.CHARMS_APP_VK;
 
   constructor() {
-    const binaryPath = path.join(__dirname, '../../../charms/target/wasm32-wasip1/release/seal.wasm');
-    if (!fs.existsSync(binaryPath)) {
-      throw new Error('Charms binary not found. Run: cd charms && charms app build');
+    this.loadAppBinary();
+  }
+
+  private loadAppBinary(): void {
+    const possiblePaths = [
+      path.join(__dirname, '../../../charms/target/wasm32-wasip1/release/seal.wasm'),
+      path.join(__dirname, '../../../charms/target/riscv32im-risc0-zkvm-elf/release/seal'),
+      path.join(process.cwd(), 'charms/target/wasm32-wasip1/release/seal.wasm'),
+    ];
+
+    for (const binaryPath of possiblePaths) {
+      if (fs.existsSync(binaryPath)) {
+        this.appBinary = fs.readFileSync(binaryPath).toString('base64');
+        return;
+      }
     }
-    this.appBinary = fs.readFileSync(binaryPath).toString('base64');
   }
 
   getAppString(escrowId: string): string {
@@ -51,25 +69,28 @@ export class CharmsService {
     prevTxHex: string,
     outputAddress: string,
     changeAddress: string
-  ): Promise<{ commitTx: string; spellTx: string }> {
+  ): Promise<SpellResult> {
     const body = {
       spell: {
-        version: 2,
+        version: SPELL_VERSION,
         apps: { '$00': this.getAppString(escrowId) },
         ins: [],
         outs: [{ address: outputAddress, charms: { '$00': escrow }, sats: 1000 }],
-        private_inputs: { '$00': { Create: null } }
       },
-      binaries: { [this.appVk]: this.appBinary },
-      prev_txs: [prevTxHex],
+      binaries: this.appBinary ? { [this.appVk]: this.appBinary } : {},
+      prev_txs: prevTxHex ? [prevTxHex] : [],
       funding_utxo: fundingUtxo,
       funding_utxo_value: fundingValue,
       change_address: changeAddress,
-      fee_rate: 2
+      fee_rate: 2,
+      private_inputs: { '$00': { Create: null } }
     };
 
     const res = await axios.post(this.proverApi, body, { timeout: 600000 });
-    return { commitTx: res.data[0], spellTx: res.data[1] };
+    return { 
+      commitTx: res.data[0].bitcoin || res.data[0], 
+      spellTx: res.data[1].bitcoin || res.data[1] 
+    };
   }
 
   async createReleaseSpell(
@@ -82,25 +103,28 @@ export class CharmsService {
     fundingUtxo: string,
     fundingValue: number,
     changeAddress: string
-  ): Promise<{ commitTx: string; spellTx: string }> {
+  ): Promise<SpellResult> {
     const body = {
       spell: {
-        version: 2,
+        version: SPELL_VERSION,
         apps: { '$00': this.getAppString(escrowId) },
         ins: [{ utxo_id: inputUtxo, charms: { '$00': escrow } }],
         outs: [{ address: sellerAddress, charms: { '$00': { ...escrow, state: 'Released' } }, sats: 1000 }],
-        private_inputs: { '$00': { Release: { attestation } } }
       },
-      binaries: { [this.appVk]: this.appBinary },
+      binaries: this.appBinary ? { [this.appVk]: this.appBinary } : {},
       prev_txs: [prevTxHex],
       funding_utxo: fundingUtxo,
       funding_utxo_value: fundingValue,
       change_address: changeAddress,
-      fee_rate: 2
+      fee_rate: 2,
+      private_inputs: { '$00': { Release: { attestation } } }
     };
 
     const res = await axios.post(this.proverApi, body, { timeout: 600000 });
-    return { commitTx: res.data[0], spellTx: res.data[1] };
+    return { 
+      commitTx: res.data[0].bitcoin || res.data[0], 
+      spellTx: res.data[1].bitcoin || res.data[1] 
+    };
   }
 
   async createRefundSpell(
@@ -113,25 +137,28 @@ export class CharmsService {
     fundingUtxo: string,
     fundingValue: number,
     changeAddress: string
-  ): Promise<{ commitTx: string; spellTx: string }> {
+  ): Promise<SpellResult> {
     const body = {
       spell: {
-        version: 2,
+        version: SPELL_VERSION,
         apps: { '$00': this.getAppString(escrowId) },
         ins: [{ utxo_id: inputUtxo, charms: { '$00': escrow } }],
         outs: [{ address: buyerAddress, charms: { '$00': { ...escrow, state: 'Refunded' } }, sats: 1000 }],
-        private_inputs: { '$00': { Refund: { current_block: currentBlock } } }
       },
-      binaries: { [this.appVk]: this.appBinary },
+      binaries: this.appBinary ? { [this.appVk]: this.appBinary } : {},
       prev_txs: [prevTxHex],
       funding_utxo: fundingUtxo,
       funding_utxo_value: fundingValue,
       change_address: changeAddress,
-      fee_rate: 2
+      fee_rate: 2,
+      private_inputs: { '$00': { Refund: { current_block: currentBlock } } }
     };
 
     const res = await axios.post(this.proverApi, body, { timeout: 600000 });
-    return { commitTx: res.data[0], spellTx: res.data[1] };
+    return { 
+      commitTx: res.data[0].bitcoin || res.data[0], 
+      spellTx: res.data[1].bitcoin || res.data[1] 
+    };
   }
 
   generateAttestation(escrowId: string, txHash: string, signerKey: string): Attestation {

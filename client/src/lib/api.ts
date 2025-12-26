@@ -60,12 +60,17 @@ export const api = {
       return request<any[]>(`/escrow${query}`);
     },
     get: (id: string) => request<any>(`/escrow/${id}`),
+    getPublic: (id: string) => request<any>(`/escrow/invite/${id}`),
     accept: (id: string) => request<any>(`/escrow/${id}/accept`, { method: 'POST' }),
     reject: (id: string) => request<any>(`/escrow/${id}/reject`, { method: 'POST' }),
     lock: (id: string, data: any) =>
       request<any>(`/escrow/${id}/lock`, { method: 'POST', body: JSON.stringify(data) }),
     submitProof: (id: string, txHash: string) =>
       request<any>(`/escrow/${id}/submit-proof`, { method: 'POST', body: JSON.stringify({ txHash }) }),
+    release: (id: string, data: any) =>
+      request<any>(`/escrow/${id}/release`, { method: 'POST', body: JSON.stringify(data) }),
+    refund: (id: string, data: any) =>
+      request<any>(`/escrow/${id}/refund`, { method: 'POST', body: JSON.stringify(data) }),
     pendingInvites: () => request<any[]>('/escrow/pending-invites'),
   },
 };

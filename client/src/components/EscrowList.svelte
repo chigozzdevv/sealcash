@@ -7,6 +7,12 @@
 
   let loading = true;
   let filter: 'all' | 'buyer' | 'seller' = 'all';
+  let expandedId: string | null = null;
+  let actionLoading = false;
+
+  // Form states for different actions
+  let lockForm = { fundingUtxo: '', fundingValue: '', prevTxHex: '', outputAddress: '', changeAddress: '' };
+  let proofForm = { txHash: '' };
 
   const statusColors: Record<string, string> = {
     pendingInvite: 'bg-yellow-500/20 text-yellow-500',
@@ -31,14 +37,63 @@
     }
   }
 
-  async function handleAction(id: string, action: 'accept' | 'reject') {
+  async function handleAcceptReject(id: string, action: 'accept' | 'reject') {
+    actionLoading = true;
     try {
       if (action === 'accept') await api.escrow.accept(id);
       else await api.escrow.reject(id);
       await loadEscrows();
     } catch (e: any) {
       alert(e.message);
+    } finally {
+      actionLoading = false;
     }
+  }
+
+  async function handleLock(id: string) {
+    actionLoading = true;
+    try {
+      await api.escrow.lock(id, {
+        fundingUtxo: lockForm.fundingUtxo,
+        fundingValue: parseInt(lockForm.fundingValue),
+        prevTxHex: lockForm.prevTxHex,
+        outputAddress: lockForm.outputAddress,
+        changeAddress: lockForm.changeAddress,
+      });
+      lockForm = { fundingUtxo: '', fundingValue: '', prevTxHex: '', outputAddress: '', changeAddress: '' };
+      expandedId = null;
+      await loadEscrows();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      actionLoading = false;
+    }
+  }
+
+  async function handleSubmitProof(id: string) {
+    actionLoading = true;
+    try {
+      await api.escrow.submitProof(id, proofForm.txHash);
+      proofForm = { txHash: '' };
+      expandedId = null;
+      await loadEscrows();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      actionLoading = false;
+    }
+  }
+
+  function toggleExpand(id: string) {
+    expandedId = expandedId === id ? null : id;
+  }
+
+  function isBuyer(escrow: any) {
+    return escrow.buyerId === $wallet.address;
+  }
+
+  function isSeller(escrow: any) {
+    return escrow.sellerId === $wallet.address;
   }
 
   onMount(() => {
@@ -49,12 +104,7 @@
   $: filter, $wallet.connected && loadEscrows();
 </script>
 
-<Motion
-  initial={{ opacity: 0 }}
-  animate={{ opacity: 1 }}
-  transition={{ duration: 0.3 }}
-  let:motion
->
+<Motion initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} let:motion>
   <div use:motion class="w-full max-w-2xl mx-auto">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-medium">Your Escrows</h2>
@@ -79,13 +129,12 @@
     {:else}
       <div class="space-y-3">
         {#each $escrows as escrow (escrow._id)}
-          <Motion
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            let:motion
-          >
-            <div use:motion class="p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl">
-              <div class="flex items-start justify-between mb-3">
+          <div class="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
+            <button 
+              on:click={() => toggleExpand(escrow._id)}
+              class="w-full p-4 text-left"
+            >
+              <div class="flex items-start justify-between mb-2">
                 <div>
                   <span class="text-lg font-medium">{escrow.btcAmount} BTC</span>
                   <span class="text-[var(--muted)] text-sm ml-2">→ {escrow.amount || escrow.tokenId} {escrow.chain}</span>
@@ -94,30 +143,108 @@
                   {escrow.status}
                 </span>
               </div>
-              
-              <div class="text-sm text-[var(--muted)] space-y-1">
-                <p>Seller: {escrow.sellerId.slice(0, 10)}...</p>
-                <p>Expires: {new Date(escrow.timeout).toLocaleDateString()}</p>
+              <div class="text-sm text-[var(--muted)] flex gap-4">
+                <span>{isBuyer(escrow) ? 'You are buyer' : 'You are seller'}</span>
+                <span>Expires: {new Date(escrow.timeout).toLocaleDateString()}</span>
               </div>
+            </button>
 
-              {#if escrow.status === 'pending' && escrow.sellerId === $wallet.address}
-                <div class="flex gap-2 mt-3">
-                  <button
-                    on:click={() => handleAction(escrow._id, 'accept')}
-                    class="px-4 py-1.5 bg-green-500/20 text-green-500 text-sm rounded-lg hover:bg-green-500/30 transition-colors"
-                  >
-                    Accept
-                  </button>
-                  <button
-                    on:click={() => handleAction(escrow._id, 'reject')}
-                    class="px-4 py-1.5 bg-red-500/20 text-red-500 text-sm rounded-lg hover:bg-red-500/30 transition-colors"
-                  >
-                    Reject
-                  </button>
-                </div>
-              {/if}
-            </div>
-          </Motion>
+            {#if expandedId === escrow._id}
+              <div class="px-4 pb-4 border-t border-[var(--border)] pt-3">
+                <!-- Seller: Accept/Reject pending escrow -->
+                {#if escrow.status === 'pending' && isSeller(escrow)}
+                  <div class="flex gap-2">
+                    <button
+                      on:click={() => handleAcceptReject(escrow._id, 'accept')}
+                      disabled={actionLoading}
+                      class="flex-1 px-4 py-2 bg-green-500/20 text-green-500 text-sm rounded-lg hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                    >
+                      Accept Escrow
+                    </button>
+                    <button
+                      on:click={() => handleAcceptReject(escrow._id, 'reject')}
+                      disabled={actionLoading}
+                      class="flex-1 px-4 py-2 bg-red-500/20 text-red-500 text-sm rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </div>
+
+                <!-- Buyer: Lock BTC after seller accepts -->
+                {:else if escrow.status === 'accepted' && isBuyer(escrow)}
+                  <div class="space-y-3">
+                    <p class="text-sm text-[var(--muted)]">Seller accepted. Lock your BTC to proceed.</p>
+                    <input
+                      bind:value={lockForm.fundingUtxo}
+                      placeholder="Funding UTXO (txid:vout)"
+                      class="w-full px-3 py-2 bg-black/30 border border-[var(--border)] rounded-lg text-sm"
+                    />
+                    <input
+                      bind:value={lockForm.fundingValue}
+                      placeholder="Funding value (sats)"
+                      type="number"
+                      class="w-full px-3 py-2 bg-black/30 border border-[var(--border)] rounded-lg text-sm"
+                    />
+                    <input
+                      bind:value={lockForm.outputAddress}
+                      placeholder="Output address (Taproot)"
+                      class="w-full px-3 py-2 bg-black/30 border border-[var(--border)] rounded-lg text-sm"
+                    />
+                    <input
+                      bind:value={lockForm.changeAddress}
+                      placeholder="Change address"
+                      class="w-full px-3 py-2 bg-black/30 border border-[var(--border)] rounded-lg text-sm"
+                    />
+                    <button
+                      on:click={() => handleLock(escrow._id)}
+                      disabled={actionLoading || !lockForm.fundingUtxo || !lockForm.fundingValue}
+                      class="w-full px-4 py-2 bg-[var(--primary)] text-black text-sm font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {actionLoading ? 'Locking...' : 'Lock BTC'}
+                    </button>
+                  </div>
+
+                <!-- Seller: Submit proof after BTC is locked -->
+                {:else if escrow.status === 'locked' && isSeller(escrow)}
+                  <div class="space-y-3">
+                    <p class="text-sm text-[var(--muted)]">BTC is locked. Send the tokens and submit the transaction hash.</p>
+                    <div class="text-xs text-[var(--muted)] bg-black/30 p-2 rounded-lg">
+                      <p>Send to: {escrow.receiverAddress}</p>
+                      <p>Amount: {escrow.amount || escrow.tokenId}</p>
+                      <p>Chain: {escrow.chain}</p>
+                    </div>
+                    <input
+                      bind:value={proofForm.txHash}
+                      placeholder="Transaction hash"
+                      class="w-full px-3 py-2 bg-black/30 border border-[var(--border)] rounded-lg text-sm"
+                    />
+                    <button
+                      on:click={() => handleSubmitProof(escrow._id)}
+                      disabled={actionLoading || !proofForm.txHash}
+                      class="w-full px-4 py-2 bg-[var(--primary)] text-black text-sm font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {actionLoading ? 'Verifying...' : 'Submit Proof'}
+                    </button>
+                  </div>
+
+                <!-- Completed -->
+                {:else if escrow.status === 'completed'}
+                  <p class="text-sm text-green-500">✓ Escrow completed successfully</p>
+
+                <!-- Refunded -->
+                {:else if escrow.status === 'refunded'}
+                  <p class="text-sm text-orange-500">↩ Escrow was refunded</p>
+
+                <!-- Rejected -->
+                {:else if escrow.status === 'rejected'}
+                  <p class="text-sm text-red-500">✗ Escrow was rejected</p>
+
+                {:else}
+                  <p class="text-sm text-[var(--muted)]">Waiting for next step...</p>
+                {/if}
+              </div>
+            {/if}
+          </div>
         {/each}
       </div>
     {/if}

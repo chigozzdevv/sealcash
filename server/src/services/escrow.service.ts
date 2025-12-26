@@ -1,6 +1,7 @@
 import { EscrowModel, UserModel } from '@models/models';
 import { CharmsService, EscrowCharm } from '@services/charms.service';
 import { BlockchainService, ChainType } from '@services/blockchain.service';
+import { BitcoinService } from '@services/bitcoin.service';
 import { env } from '@config/env';
 
 export interface CreateEscrowRequest {
@@ -22,6 +23,7 @@ export interface LockBtcRequest {
   prevTxHex: string;
   outputAddress: string;
   changeAddress: string;
+  broadcast?: boolean;
 }
 
 export interface ReleaseRequest {
@@ -29,16 +31,19 @@ export interface ReleaseRequest {
   fundingValue: number;
   prevTxHex: string;
   changeAddress: string;
+  broadcast?: boolean;
 }
 
 export class EscrowService {
   private charms: CharmsService;
   private blockchain: BlockchainService;
+  private bitcoin: BitcoinService;
   private signerKey = env.ATTESTATION_KEY;
 
   constructor() {
     this.charms = new CharmsService();
     this.blockchain = new BlockchainService();
+    this.bitcoin = new BitcoinService();
   }
 
   async createEscrow(buyerBtcAddress: string, data: CreateEscrowRequest) {
@@ -67,8 +72,18 @@ export class EscrowService {
     const escrow = await EscrowModel.findById(escrowId);
     if (!escrow) throw new Error('Escrow not found');
     if (escrow.sellerId !== sellerBtcAddress) throw new Error('Not authorized');
-    if (escrow.status !== 'pending') throw new Error('Escrow not pending');
+    if (!['pending', 'pendingInvite'].includes(escrow.status)) throw new Error('Escrow not pending');
     if (new Date() > escrow.timeout) throw new Error('Escrow expired');
+
+    // Auto-register seller if not registered (invite flow)
+    let seller = await UserModel.findOne({ 'addresses.bitcoin': sellerBtcAddress });
+    if (!seller) {
+      seller = new UserModel({
+        publicKey: sellerBtcAddress,
+        addresses: { bitcoin: sellerBtcAddress }
+      });
+      await seller.save();
+    }
 
     escrow.status = 'accepted';
     escrow.updatedAt = new Date();
@@ -80,7 +95,7 @@ export class EscrowService {
     const escrow = await EscrowModel.findById(escrowId);
     if (!escrow) throw new Error('Escrow not found');
     if (escrow.sellerId !== sellerBtcAddress) throw new Error('Not authorized');
-    if (escrow.status !== 'pending') throw new Error('Escrow not pending');
+    if (!['pending', 'pendingInvite'].includes(escrow.status)) throw new Error('Escrow not pending');
 
     escrow.status = 'rejected';
     escrow.updatedAt = new Date();
@@ -106,13 +121,26 @@ export class EscrowService {
       btcData.changeAddress
     );
 
+    // Broadcast transactions to Bitcoin network if requested
+    let broadcastResult = null;
+    if (btcData.broadcast) {
+      broadcastResult = await this.bitcoin.broadcastSpellPackage(commitTx, spellTx);
+    }
+
     escrow.status = 'locked';
     escrow.taprootAddress = btcData.outputAddress;
-    escrow.utxoId = `${commitTx.slice(0, 64)}:0`;
+    escrow.utxoId = broadcastResult?.commitTxId 
+      ? `${broadcastResult.commitTxId}:0`
+      : `${commitTx.slice(0, 64)}:0`;
     escrow.updatedAt = new Date();
     await escrow.save();
 
-    return { escrow, commitTx, spellTx };
+    return { 
+      escrow, 
+      commitTx, 
+      spellTx,
+      broadcast: broadcastResult 
+    };
   }
 
   async submitProof(escrowId: string, sellerBtcAddress: string, txHash: string) {
@@ -159,12 +187,23 @@ export class EscrowService {
       btcData.changeAddress
     );
 
+    // Broadcast transactions to Bitcoin network if requested
+    let broadcastResult = null;
+    if (btcData.broadcast) {
+      broadcastResult = await this.bitcoin.broadcastSpellPackage(commitTx, spellTx);
+    }
+
     escrow.status = 'completed';
     escrow.zkProof = JSON.stringify(attestation);
     escrow.updatedAt = new Date();
     await escrow.save();
 
-    return { escrow, commitTx, spellTx };
+    return { 
+      escrow, 
+      commitTx, 
+      spellTx,
+      broadcast: broadcastResult 
+    };
   }
 
   async refundBtc(escrowId: string, buyerBtcAddress: string, btcData: ReleaseRequest & { currentBlock: number }) {
@@ -189,11 +228,22 @@ export class EscrowService {
       btcData.changeAddress
     );
 
+    // Broadcast transactions to Bitcoin network if requested
+    let broadcastResult = null;
+    if (btcData.broadcast) {
+      broadcastResult = await this.bitcoin.broadcastSpellPackage(commitTx, spellTx);
+    }
+
     escrow.status = 'refunded';
     escrow.updatedAt = new Date();
     await escrow.save();
 
-    return { escrow, commitTx, spellTx };
+    return { 
+      escrow, 
+      commitTx, 
+      spellTx,
+      broadcast: broadcastResult 
+    };
   }
 
   async getEscrow(id: string) {

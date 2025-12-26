@@ -31,6 +31,12 @@ export const env = {
   SOLANA_RPC_URL: required('SOLANA_RPC_URL'),
   SUI_RPC_URL: required('SUI_RPC_URL'),
   
+  // Bitcoin RPC (for transaction broadcasting)
+  BITCOIN_RPC_URL: optional('BITCOIN_RPC_URL', 'http://localhost:18332'),
+  BITCOIN_RPC_USER: optional('BITCOIN_RPC_USER', ''),
+  BITCOIN_RPC_PASSWORD: optional('BITCOIN_RPC_PASSWORD', ''),
+  BITCOIN_NETWORK: optional('BITCOIN_NETWORK', 'testnet4'),
+  
   // Charms
   CHARMS_PROVER_API: optional('CHARMS_PROVER_API', 'https://v8.charms.dev/spells/prove'),
   CHARMS_APP_VK: required('CHARMS_APP_VK'),

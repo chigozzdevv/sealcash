@@ -19,6 +19,7 @@
   let loading = false;
   let result: { inviteLink: string | null; escrowId: string } | null = null;
   let error = '';
+  let copied = false;
 
   const chains = ['ethereum', 'polygon', 'bnb', 'solana', 'sui'];
 
@@ -46,6 +47,7 @@
 
   function reset() {
     result = null;
+    copied = false;
     form = {
       sellerBtcAddress: '',
       btcAmount: '',
@@ -58,6 +60,14 @@
       receiverAddress: '',
       timeout: '',
     };
+  }
+
+  async function copyLink() {
+    if (!result?.inviteLink) return;
+    const fullLink = `${window.location.origin}${result.inviteLink}`;
+    await navigator.clipboard.writeText(fullLink);
+    copied = true;
+    setTimeout(() => copied = false, 2000);
   }
 </script>
 
@@ -78,9 +88,27 @@
         <h3 class="text-lg font-medium mb-2">Escrow Created</h3>
         {#if result.inviteLink}
           <p class="text-[var(--muted)] text-sm mb-4">Share this link with the seller:</p>
-          <code class="block p-3 bg-black/50 rounded-lg text-sm break-all mb-4">
-            {window.location.origin}{result.inviteLink}
-          </code>
+          <div class="relative">
+            <code class="block p-3 pr-12 bg-black/50 rounded-lg text-sm break-all">
+              {window.location.origin}{result.inviteLink}
+            </code>
+            <button
+              on:click={copyLink}
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-white/10 rounded transition-colors"
+              title="Copy link"
+            >
+              {#if copied}
+                <svg class="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+              {:else}
+                <svg class="w-4 h-4 text-[var(--muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              {/if}
+            </button>
+          </div>
+          <p class="text-[var(--muted)] text-xs mt-2">{copied ? 'Copied!' : 'Click to copy'}</p>
         {:else}
           <p class="text-[var(--muted)] text-sm mb-4">Seller has been notified.</p>
         {/if}
