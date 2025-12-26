@@ -145,7 +145,7 @@ export class EscrowService {
 
   async submitProof(escrowId: string, sellerBtcAddress: string, txHash: string) {
     const escrow = await EscrowModel.findById(escrowId);
-    if (!escrow || escrow.sellerId !== sellerBtcAddress || escrow.status !== 'accepted') {
+    if (!escrow || escrow.sellerId !== sellerBtcAddress || escrow.status !== 'locked') {
       throw new Error('Invalid escrow');
     }
     if (new Date() > escrow.timeout) throw new Error('Expired');
@@ -158,6 +158,8 @@ export class EscrowService {
 
     escrow.submittedTxHash = txHash;
     escrow.verifiedTransfer = { txHash, blockNumber: verified.blockNumber, timestamp: verified.timestamp, verified: true };
+    escrow.status = 'completed';
+    escrow.updatedAt = new Date();
     await escrow.save();
 
     return escrow;
