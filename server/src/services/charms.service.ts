@@ -72,6 +72,7 @@ export class CharmsService {
     changeAddress: string
   ): Promise<SpellResult> {
     const body = {
+      chain: 'bitcoin',
       spell: {
         version: SPELL_VERSION,
         apps: { '$00': this.getAppString(escrowId) },
@@ -111,6 +112,7 @@ export class CharmsService {
     changeAddress: string
   ): Promise<SpellResult> {
     const body = {
+      chain: 'bitcoin',
       spell: {
         version: SPELL_VERSION,
         apps: { '$00': this.getAppString(escrowId) },
@@ -150,6 +152,7 @@ export class CharmsService {
     changeAddress: string
   ): Promise<SpellResult> {
     const body = {
+      chain: 'bitcoin',
       spell: {
         version: SPELL_VERSION,
         apps: { '$00': this.getAppString(escrowId) },
