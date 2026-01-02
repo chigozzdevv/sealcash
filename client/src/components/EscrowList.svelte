@@ -4,7 +4,7 @@
   import { api } from '@lib/api';
   import { escrows, type Escrow } from '@stores/escrow';
   import { wallet } from '@stores/wallet';
-  import { sendBtcTransaction, getWalletUtxos } from '@lib/wallet';
+  import { sendBtcTransaction, getWalletUtxos, getRawTransaction, broadcastTransaction } from '@lib/wallet';
 
   let loading = true;
   let filter: 'all' | 'buyer' | 'seller' = 'all';
@@ -55,14 +55,42 @@
       const escrow = $escrows.find(e => e._id === escrowId);
       if (!escrow) throw new Error('Escrow not found');
 
+      const utxos = await getWalletUtxos($wallet.address!);
+      if (!utxos.length) throw new Error('No UTXOs available');
+
       const amountSats = Math.floor(parseFloat(escrow.btcAmount) * 1e8);
+      const minRequired = amountSats + 2000;
       
-      const txid = await sendBtcTransaction($wallet.address!, amountSats);
-      
-      if (txid) {
-        alert(`Transaction sent! TxID: ${txid}\n\nNote: Full Charms integration requires additional setup.`);
-        await loadEscrows();
+      const fundingUtxo = utxos.find((u: any) => u.value >= minRequired);
+      if (!fundingUtxo) throw new Error(`Need at least ${minRequired} sats in a single UTXO`);
+
+      const prevTxHex = await getRawTransaction(fundingUtxo.txid);
+
+      try {
+        const result = await api.escrow.lock(escrowId, {
+          fundingUtxo: `${fundingUtxo.txid}:${fundingUtxo.vout}`,
+          fundingValue: fundingUtxo.value,
+          prevTxHex,
+          outputAddress: $wallet.address,
+          changeAddress: $wallet.address,
+          broadcast: false,
+        });
+
+        const commitTxId = await broadcastTransaction(result.commitTx);
+        await new Promise(r => setTimeout(r, 500));
+        const spellTxId = await broadcastTransaction(result.spellTx);
+
+        alert(`BTC locked successfully!\n\nCommit TX: ${commitTxId}\nSpell TX: ${spellTxId}`);
+      } catch (proverErr: any) {
+        console.error('Prover error:', proverErr);
+        
+        const txid = await sendBtcTransaction(escrow.sellerId, amountSats);
+        if (txid) {
+          alert(`BTC sent via simple transfer.\n\nTxID: ${txid}\n\nNote: Charms spell creation failed - ${proverErr.message}`);
+        }
       }
+      
+      await loadEscrows();
     } catch (e: any) {
       alert(e.message || 'Failed to lock BTC');
     } finally {
@@ -135,16 +163,18 @@
               class="w-full p-4 text-left"
             >
               <div class="flex items-start justify-between mb-2">
-                <div>
+                <div class="flex items-center gap-2">
                   <span class="text-lg font-medium">{escrow.btcAmount} BTC</span>
-                  <span class="text-[var(--muted)] text-sm ml-2">→ {escrow.amount || escrow.tokenId} {escrow.chain}</span>
+                  <span class="text-[var(--muted)] text-sm">→ {escrow.amount || escrow.tokenId} {escrow.chain}</span>
+                  <span class="px-2 py-0.5 text-xs rounded-full bg-[var(--border)] text-[var(--muted)]">
+                    {isBuyer(escrow) ? 'Buyer' : 'Seller'}
+                  </span>
                 </div>
                 <span class="px-2 py-0.5 text-xs rounded-full {statusColors[escrow.status] || 'bg-gray-500/20'}">
                   {escrow.status}
                 </span>
               </div>
-              <div class="text-sm text-[var(--muted)] flex gap-4">
-                <span>{isBuyer(escrow) ? 'You are buyer' : 'You are seller'}</span>
+              <div class="text-sm text-[var(--muted)]">
                 <span>Expires: {new Date(escrow.timeout).toLocaleDateString()}</span>
               </div>
             </button>
@@ -186,6 +216,13 @@
                       {actionLoading ? 'Preparing transaction...' : `Lock ${escrow.btcAmount} BTC`}
                     </button>
                     <p class="text-xs text-center text-[var(--muted)]">Your wallet will prompt you to sign the transaction</p>
+                  </div>
+
+                <!-- Seller: Waiting for buyer to lock BTC -->
+                {:else if escrow.status === 'accepted' && isSeller(escrow)}
+                  <div class="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                    <p class="text-sm text-yellow-500">⚠️ Waiting for buyer to lock BTC</p>
+                    <p class="text-xs text-[var(--muted)] mt-1">Do NOT send tokens until status shows "locked"</p>
                   </div>
 
                 <!-- Seller: Submit proof after BTC is locked -->

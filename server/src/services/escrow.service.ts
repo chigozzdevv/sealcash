@@ -11,13 +11,15 @@ export interface CreateEscrowRequest {
   chain: ChainType;
   contractAddress?: string;
   amount?: string;
+  collectionAddress?: string;
   tokenId?: string;
   senderAddress: string;
   receiverAddress: string;
-  timeout: Date;
+  refundAddress?: string;
+  timeout: string;
 }
 
-export interface LockBtcRequest {
+export interface LockRequest {
   fundingUtxo: string;
   fundingValue: number;
   prevTxHex: string;
@@ -48,46 +50,41 @@ export class EscrowService {
 
   async createEscrow(buyerBtcAddress: string, data: CreateEscrowRequest) {
     if (buyerBtcAddress === data.sellerBtcAddress) {
-      throw new Error('Buyer and seller cannot be the same address');
+      throw new Error('Buyer and seller cannot be the same');
     }
 
     const buyer = await UserModel.findOne({ 'addresses.bitcoin': buyerBtcAddress });
-    if (!buyer) throw new Error('Buyer must be registered');
+    if (!buyer) throw new Error('Buyer not registered');
 
     const seller = await UserModel.findOne({ 'addresses.bitcoin': data.sellerBtcAddress });
-    const sellerRegistered = !!seller;
+    if (!seller) throw new Error('Seller not found');
 
     const escrow = new EscrowModel({
       buyerId: buyerBtcAddress,
       sellerId: data.sellerBtcAddress,
-      ...data,
-      status: sellerRegistered ? 'pending' : 'pendingInvite'
+      btcAmount: data.btcAmount,
+      assetType: data.assetType,
+      chain: data.chain,
+      contractAddress: data.contractAddress,
+      amount: data.amount,
+      collectionAddress: data.collectionAddress,
+      tokenId: data.tokenId,
+      senderAddress: data.senderAddress,
+      receiverAddress: data.receiverAddress,
+      refundAddress: data.refundAddress || buyerBtcAddress,
+      timeout: new Date(data.timeout),
+      status: 'pending'
     });
-    await escrow.save();
 
-    return {
-      escrow,
-      sellerRegistered,
-      inviteLink: sellerRegistered ? null : `/invite/${escrow._id}`
-    };
+    await escrow.save();
+    return escrow;
   }
 
   async acceptEscrow(escrowId: string, sellerBtcAddress: string) {
     const escrow = await EscrowModel.findById(escrowId);
-    if (!escrow) throw new Error('Escrow not found');
-    if (escrow.sellerId !== sellerBtcAddress) throw new Error('Not authorized');
-    if (!['pending', 'pendingInvite'].includes(escrow.status)) throw new Error('Escrow not pending');
+    if (!escrow || escrow.sellerId !== sellerBtcAddress) throw new Error('Invalid escrow');
+    if (escrow.status !== 'pending') throw new Error('Escrow not pending');
     if (new Date() > escrow.timeout) throw new Error('Escrow expired');
-
-    // Auto-register seller if not registered (invite flow)
-    let seller = await UserModel.findOne({ 'addresses.bitcoin': sellerBtcAddress });
-    if (!seller) {
-      seller = new UserModel({
-        publicKey: sellerBtcAddress,
-        addresses: { bitcoin: sellerBtcAddress }
-      });
-      await seller.save();
-    }
 
     escrow.status = 'accepted';
     escrow.updatedAt = new Date();
@@ -97,9 +94,8 @@ export class EscrowService {
 
   async rejectEscrow(escrowId: string, sellerBtcAddress: string) {
     const escrow = await EscrowModel.findById(escrowId);
-    if (!escrow) throw new Error('Escrow not found');
-    if (escrow.sellerId !== sellerBtcAddress) throw new Error('Not authorized');
-    if (!['pending', 'pendingInvite'].includes(escrow.status)) throw new Error('Escrow not pending');
+    if (!escrow || escrow.sellerId !== sellerBtcAddress) throw new Error('Invalid escrow');
+    if (escrow.status !== 'pending') throw new Error('Escrow not pending');
 
     escrow.status = 'rejected';
     escrow.updatedAt = new Date();
@@ -107,7 +103,7 @@ export class EscrowService {
     return escrow;
   }
 
-  async lockBtc(escrowId: string, buyerBtcAddress: string, btcData: LockBtcRequest) {
+  async lockBtc(escrowId: string, buyerBtcAddress: string, btcData: LockRequest) {
     const escrow = await EscrowModel.findById(escrowId);
     if (!escrow || escrow.buyerId !== buyerBtcAddress) throw new Error('Invalid escrow');
     if (escrow.status !== 'accepted') throw new Error('Escrow not accepted by seller');
@@ -125,55 +121,74 @@ export class EscrowService {
       btcData.changeAddress
     );
 
-    // Broadcast transactions to Bitcoin network if requested
     let broadcastResult = null;
     if (btcData.broadcast) {
       broadcastResult = await this.bitcoin.broadcastSpellPackage(commitTx, spellTx);
     }
 
     escrow.status = 'locked';
-    escrow.taprootAddress = btcData.outputAddress;
-    escrow.utxoId = broadcastResult?.commitTxId 
-      ? `${broadcastResult.commitTxId}:0`
-      : `${commitTx.slice(0, 64)}:0`;
+    escrow.utxoId = `${broadcastResult?.commitTxId || 'pending'}:0`;
     escrow.updatedAt = new Date();
     await escrow.save();
 
-    return { 
-      escrow, 
-      commitTx, 
+    return {
+      escrow,
+      commitTx,
       spellTx,
-      broadcast: broadcastResult 
+      broadcast: broadcastResult
     };
   }
 
   async submitProof(escrowId: string, sellerBtcAddress: string, txHash: string) {
     const escrow = await EscrowModel.findById(escrowId);
-    if (!escrow || escrow.sellerId !== sellerBtcAddress || escrow.status !== 'locked') {
-      throw new Error('Invalid escrow');
+    if (!escrow || escrow.sellerId !== sellerBtcAddress) throw new Error('Invalid escrow');
+    if (escrow.status !== 'locked') throw new Error('BTC not locked yet');
+
+    let verified = false;
+    let verificationData = null;
+
+    try {
+      if (escrow.assetType === 'token') {
+        verificationData = await this.blockchain.verifyTokenTransfer(
+          escrow.chain as ChainType,
+          txHash,
+          escrow.senderAddress,
+          escrow.receiverAddress,
+          escrow.amount!,
+          escrow.contractAddress
+        );
+      } else {
+        verificationData = await this.blockchain.verifyNFTTransfer(
+          escrow.chain as ChainType,
+          txHash,
+          escrow.senderAddress,
+          escrow.receiverAddress,
+          escrow.tokenId!,
+          escrow.collectionAddress!
+        );
+      }
+      verified = !!verificationData;
+    } catch (error) {
+      console.error('Verification failed:', error);
     }
-    if (new Date() > escrow.timeout) throw new Error('Expired');
-
-    const verified = escrow.assetType === 'token'
-      ? await this.blockchain.verifyTokenTransfer(escrow.chain, txHash, escrow.senderAddress, escrow.receiverAddress, escrow.amount!, escrow.contractAddress || undefined)
-      : await this.blockchain.verifyNFTTransfer(escrow.chain, txHash, escrow.senderAddress, escrow.receiverAddress, escrow.tokenId!, escrow.contractAddress || '');
-
-    if (!verified) throw new Error('Transfer verification failed');
 
     escrow.submittedTxHash = txHash;
-    escrow.verifiedTransfer = { txHash, blockNumber: verified.blockNumber, timestamp: verified.timestamp, verified: true };
-    escrow.status = 'completed';
+    escrow.verifiedTransfer = {
+      txHash,
+      blockNumber: verificationData?.blockNumber || 0,
+      timestamp: verificationData?.timestamp || Math.floor(Date.now() / 1000),
+      verified
+    };
     escrow.updatedAt = new Date();
     await escrow.save();
 
-    return escrow;
+    return { escrow, verified };
   }
 
   async releaseBtc(escrowId: string, sellerBtcAddress: string, btcData: ReleaseRequest) {
     const escrow = await EscrowModel.findById(escrowId);
-    if (!escrow || escrow.sellerId !== sellerBtcAddress || !escrow.verifiedTransfer?.verified) {
-      throw new Error('Invalid escrow or not verified');
-    }
+    if (!escrow || escrow.sellerId !== sellerBtcAddress) throw new Error('Invalid escrow');
+    if (!escrow.verifiedTransfer?.verified) throw new Error('Transfer not verified');
 
     const seller = await UserModel.findOne({ 'addresses.bitcoin': sellerBtcAddress });
     if (!seller?.addresses?.bitcoin) throw new Error('Seller has no BTC address');
@@ -193,7 +208,6 @@ export class EscrowService {
       btcData.changeAddress
     );
 
-    // Broadcast transactions to Bitcoin network if requested
     let broadcastResult = null;
     if (btcData.broadcast) {
       broadcastResult = await this.bitcoin.broadcastSpellPackage(commitTx, spellTx);
@@ -204,11 +218,11 @@ export class EscrowService {
     escrow.updatedAt = new Date();
     await escrow.save();
 
-    return { 
-      escrow, 
-      commitTx, 
+    return {
+      escrow,
+      commitTx,
       spellTx,
-      broadcast: broadcastResult 
+      broadcast: broadcastResult
     };
   }
 
@@ -234,7 +248,6 @@ export class EscrowService {
       btcData.changeAddress
     );
 
-    // Broadcast transactions to Bitcoin network if requested
     let broadcastResult = null;
     if (btcData.broadcast) {
       broadcastResult = await this.bitcoin.broadcastSpellPackage(commitTx, spellTx);
@@ -244,23 +257,30 @@ export class EscrowService {
     escrow.updatedAt = new Date();
     await escrow.save();
 
-    return { 
-      escrow, 
-      commitTx, 
+    return {
+      escrow,
+      commitTx,
       spellTx,
-      broadcast: broadcastResult 
+      broadcast: broadcastResult
     };
   }
 
-  async getEscrow(id: string) {
-    return EscrowModel.findById(id);
+  async getEscrow(escrowId: string) {
+    return EscrowModel.findById(escrowId);
   }
 
   async getUserEscrows(btcAddress: string, role?: 'buyer' | 'seller', status?: string) {
-    const query: any = { $or: [{ buyerId: btcAddress }, { sellerId: btcAddress }] };
+    const query: any = {
+      $or: [
+        { buyerId: btcAddress },
+        { sellerId: btcAddress }
+      ]
+    };
+
     if (role === 'buyer') query.$or = [{ buyerId: btcAddress }];
     if (role === 'seller') query.$or = [{ sellerId: btcAddress }];
     if (status) query.status = status;
+
     return EscrowModel.find(query).sort({ createdAt: -1 });
   }
 

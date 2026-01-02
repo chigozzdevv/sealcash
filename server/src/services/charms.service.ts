@@ -33,9 +33,9 @@ export interface SpellResult {
 const SPELL_VERSION = 8;
 
 export class CharmsService {
-  private appBinary: string | null = null;
   private proverApi = env.CHARMS_PROVER_API;
   private appVk = env.CHARMS_APP_VK;
+  private appBinary: string | null = null;
 
   constructor() {
     this.loadAppBinary();
@@ -43,9 +43,10 @@ export class CharmsService {
 
   private loadAppBinary(): void {
     const possiblePaths = [
-      path.join(__dirname, '../../../charms/target/wasm32-wasip1/release/seal.wasm'),
-      path.join(__dirname, '../../../charms/target/riscv32im-risc0-zkvm-elf/release/seal'),
-      path.join(process.cwd(), 'charms/target/wasm32-wasip1/release/seal.wasm'),
+      path.join(process.cwd(), '../charms/target/release/seal'),
+      path.join(process.cwd(), 'charms/target/release/seal'),
+      path.join(__dirname, '../../../charms/target/release/seal'),
+      path.join(__dirname, '../../../../charms/target/release/seal'),
     ];
 
     for (const binaryPath of possiblePaths) {

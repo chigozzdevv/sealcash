@@ -9,26 +9,45 @@
   import InboxDropdown from '@components/InboxDropdown.svelte';
   import InvitePage from '@components/InvitePage.svelte';
   import { wallet } from '@stores/wallet';
+  import { getToken } from '@lib/api';
 
-  let showApp = false;
+  let showApp = window.location.pathname === '/app';
   let view: 'create' | 'history' = 'create';
   let inviteId: string | null = null;
 
   onMount(() => {
-    // Check for invite link: /invite/{escrowId}
     const path = window.location.pathname;
     const match = path.match(/^\/invite\/([a-f0-9]+)$/i);
     if (match) {
       inviteId = match[1];
     }
+
+    if (getToken()) {
+      const stored = localStorage.getItem('wallet');
+      if (stored) {
+        wallet.set(JSON.parse(stored));
+      }
+    }
+
+    window.addEventListener('popstate', () => {
+      showApp = window.location.pathname === '/app';
+    });
+  });
+
+  wallet.subscribe(($w) => {
+    if ($w.connected) {
+      localStorage.setItem('wallet', JSON.stringify($w));
+    }
   });
 
   function handleLaunch() {
     showApp = true;
+    window.history.pushState({}, '', '/app');
   }
 
   function handleBack() {
     showApp = false;
+    window.history.pushState({}, '', '/');
   }
 
   function handleInviteClose() {

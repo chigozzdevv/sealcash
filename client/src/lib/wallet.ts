@@ -2,12 +2,15 @@ import {
   AddressPurpose,
   getAddress,
   signMessage,
-  sendBtcTransaction as satsSendBtc,
+  request,
   BitcoinNetworkType,
+  RpcErrorCode,
   type GetAddressResponse,
 } from 'sats-connect';
 import { wallet } from '@stores/wallet';
 import { api, setToken, clearToken } from './api';
+
+const MEMPOOL_API = 'https://mempool.space/testnet4/api';
 
 export async function connectWallet(): Promise<boolean> {
   try {
@@ -58,6 +61,7 @@ export async function connectWallet(): Promise<boolean> {
 
 export function disconnectWallet() {
   clearToken();
+  localStorage.removeItem('wallet');
   wallet.set({ connected: false, address: null, network: null });
 }
 
@@ -65,30 +69,62 @@ export async function sendBtcTransaction(
   recipientAddress: string,
   amountSats: number
 ): Promise<string | null> {
-  try {
-    const txid = await new Promise<string>((resolve, reject) => {
-      satsSendBtc({
-        payload: {
-          network: { type: BitcoinNetworkType.Testnet4 },
-          recipients: [
-            {
-              address: recipientAddress,
-              amountSats: BigInt(amountSats),
-            },
-          ],
-          senderAddress: recipientAddress,
-        },
-        onFinish: (response) => resolve(response.txid),
-        onCancel: () => reject(new Error('User cancelled transaction')),
-      });
-    });
-    return txid;
-  } catch (err) {
-    console.error('Send BTC failed:', err);
-    throw err;
+  const response = await request('sendTransfer', {
+    recipients: [
+      {
+        address: recipientAddress,
+        amount: amountSats,
+      },
+    ],
+  });
+
+  if (response.status === 'success') {
+    return response.result.txid;
+  } else {
+    if (response.error.code === RpcErrorCode.USER_REJECTION) {
+      return null;
+    }
+    throw new Error(response.error.message);
   }
 }
 
-export async function getWalletUtxos(): Promise<any[]> {
-  return [];
+export async function getWalletUtxos(address: string): Promise<any[]> {
+  const res = await fetch(`${MEMPOOL_API}/address/${address}/utxo`);
+  if (!res.ok) throw new Error('Failed to fetch UTXOs');
+  return res.json();
+}
+
+export async function getRawTransaction(txid: string): Promise<string> {
+  const res = await fetch(`${MEMPOOL_API}/tx/${txid}/hex`);
+  if (!res.ok) throw new Error('Failed to fetch transaction');
+  return res.text();
+}
+
+export async function broadcastTransaction(txHex: string): Promise<string> {
+  const res = await fetch(`${MEMPOOL_API}/tx`, {
+    method: 'POST',
+    body: txHex,
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err || 'Broadcast failed');
+  }
+  return res.text();
+}
+
+export async function signPsbt(psbtBase64: string): Promise<string> {
+  const response = await request('signPsbt', {
+    psbt: psbtBase64,
+    broadcast: false,
+    signInputs: {},
+  });
+
+  if (response.status === 'success') {
+    return response.result.psbt;
+  } else {
+    if (response.error.code === RpcErrorCode.USER_REJECTION) {
+      throw new Error('User rejected signing');
+    }
+    throw new Error(response.error.message);
+  }
 }

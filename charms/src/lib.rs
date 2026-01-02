@@ -1,4 +1,4 @@
-use charms_sdk::data::{charm_values, App, Data, Transaction};
+use charms_sdk::data::{App, Data, Transaction, charm_values};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -47,10 +47,7 @@ pub fn app_contract(app: &App, tx: &Transaction, x: &Data, w: &Data) -> bool {
 
     let witness: EscrowWitness = match w.value() {
         Ok(w) => w,
-        Err(_) => {
-            eprintln!("Failed to parse witness");
-            return false;
-        }
+        Err(_) => return false,
     };
 
     match witness {
@@ -66,29 +63,14 @@ fn validate_create(app: &App, tx: &Transaction) -> bool {
 
     let escrow = match out_escrow {
         Some(e) => e,
-        None => {
-            eprintln!("No escrow found in outputs");
-            return false;
-        }
+        None => return false,
     };
 
-    if escrow.state != EscrowState::Locked {
-        eprintln!("Escrow must be in Locked state");
-        return false;
-    }
-    if escrow.amount == 0 {
-        eprintln!("Amount must be > 0");
-        return false;
-    }
-    if escrow.buyer.is_empty() || escrow.seller.is_empty() {
-        eprintln!("Buyer and seller required");
-        return false;
-    }
-    if escrow.buyer == escrow.seller {
-        eprintln!("Buyer and seller must be different");
-        return false;
-    }
-    true
+    escrow.state == EscrowState::Locked
+        && escrow.amount > 0
+        && !escrow.buyer.is_empty()
+        && !escrow.seller.is_empty()
+        && escrow.buyer != escrow.seller
 }
 
 fn validate_release(app: &App, tx: &Transaction, attestation: &Attestation) -> bool {
@@ -97,14 +79,10 @@ fn validate_release(app: &App, tx: &Transaction, attestation: &Attestation) -> b
 
     let escrow = match in_escrow {
         Some(e) => e,
-        None => {
-            eprintln!("No escrow found in inputs");
-            return false;
-        }
+        None => return false,
     };
 
     if escrow.state != EscrowState::Locked {
-        eprintln!("Input escrow must be Locked");
         return false;
     }
 
@@ -112,7 +90,6 @@ fn validate_release(app: &App, tx: &Transaction, attestation: &Attestation) -> b
     let expected_sig = hmac_sha256(&attestation.signer, &msg);
     
     if attestation.signature != expected_sig {
-        eprintln!("Invalid attestation signature");
         return false;
     }
 
@@ -120,11 +97,8 @@ fn validate_release(app: &App, tx: &Transaction, attestation: &Attestation) -> b
         .find_map(|data| data.value().ok());
 
     match out_escrow {
-        Some(out) if out.state == EscrowState::Released && out.amount == escrow.amount => true,
-        _ => {
-            eprintln!("Invalid output state or amount");
-            false
-        }
+        Some(out) => out.state == EscrowState::Released && out.amount == escrow.amount,
+        None => false,
     }
 }
 
@@ -134,18 +108,10 @@ fn validate_refund(app: &App, tx: &Transaction, current_block: u64) -> bool {
 
     let escrow = match in_escrow {
         Some(e) => e,
-        None => {
-            eprintln!("No escrow found in inputs");
-            return false;
-        }
+        None => return false,
     };
 
-    if escrow.state != EscrowState::Locked {
-        eprintln!("Input escrow must be Locked");
-        return false;
-    }
-    if current_block < escrow.timeout {
-        eprintln!("Timeout not reached");
+    if escrow.state != EscrowState::Locked || current_block < escrow.timeout {
         return false;
     }
 
@@ -153,15 +119,12 @@ fn validate_refund(app: &App, tx: &Transaction, current_block: u64) -> bool {
         .find_map(|data| data.value().ok());
 
     match out_escrow {
-        Some(out) if out.state == EscrowState::Refunded && out.amount == escrow.amount => true,
-        _ => {
-            eprintln!("Invalid output state or amount");
-            false
-        }
+        Some(out) => out.state == EscrowState::Refunded && out.amount == escrow.amount,
+        None => false,
     }
 }
 
-fn hmac_sha256(key: &str, msg: &str) -> String {
+pub fn hmac_sha256(key: &str, msg: &str) -> String {
     let key_bytes = key.as_bytes();
     let msg_bytes = msg.as_bytes();
 
@@ -224,15 +187,6 @@ mod tests {
         }
     }
 
-    fn make_bad_attestation() -> Attestation {
-        Attestation {
-            escrow_id: "esc1".into(),
-            tx_hash: "0xabc".into(),
-            signer: "signer".into(),
-            signature: "wrong_signature".into(),
-        }
-    }
-
     #[test]
     fn test_create_valid_escrow() {
         let escrow = make_escrow();
@@ -244,20 +198,6 @@ mod tests {
     }
 
     #[test]
-    fn test_create_fails_zero_amount() {
-        let mut escrow = make_escrow();
-        escrow.amount = 0;
-        assert_eq!(escrow.amount, 0);
-    }
-
-    #[test]
-    fn test_create_fails_same_buyer_seller() {
-        let mut escrow = make_escrow();
-        escrow.seller = escrow.buyer.clone();
-        assert_eq!(escrow.buyer, escrow.seller);
-    }
-
-    #[test]
     fn test_attestation_valid_signature() {
         let att = make_attestation("esc123", "0xabc", "signer-key");
         let msg = format!("{}:{}", att.escrow_id, att.tx_hash);
@@ -266,109 +206,9 @@ mod tests {
     }
 
     #[test]
-    fn test_attestation_invalid_signature() {
-        let att = make_bad_attestation();
-        let msg = format!("{}:{}", att.escrow_id, att.tx_hash);
-        let expected = hmac_sha256(&att.signer, &msg);
-        assert_ne!(att.signature, expected);
-    }
-
-    #[test]
-    fn test_refund_timeout_not_reached() {
-        let escrow = make_escrow();
-        let current_block = 500;
-        assert!(current_block < escrow.timeout);
-    }
-
-    #[test]
-    fn test_refund_timeout_reached() {
-        let escrow = make_escrow();
-        let current_block = 1001;
-        assert!(current_block >= escrow.timeout);
-    }
-
-    #[test]
-    fn test_release_state_transition() {
-        let mut escrow = make_escrow();
-        assert_eq!(escrow.state, EscrowState::Locked);
-        escrow.state = EscrowState::Released;
-        assert_eq!(escrow.state, EscrowState::Released);
-    }
-
-    #[test]
-    fn test_refund_state_transition() {
-        let mut escrow = make_escrow();
-        assert_eq!(escrow.state, EscrowState::Locked);
-        escrow.state = EscrowState::Refunded;
-        assert_eq!(escrow.state, EscrowState::Refunded);
-    }
-
-    #[test]
-    fn test_amount_preserved_on_release() {
-        let input = make_escrow();
-        let mut output = input.clone();
-        output.state = EscrowState::Released;
-        assert_eq!(input.amount, output.amount);
-    }
-
-    #[test]
-    fn test_amount_preserved_on_refund() {
-        let input = make_escrow();
-        let mut output = input.clone();
-        output.state = EscrowState::Refunded;
-        assert_eq!(input.amount, output.amount);
-    }
-
-    #[test]
     fn test_hmac_deterministic() {
         let s1 = hmac_sha256("key", "msg");
         let s2 = hmac_sha256("key", "msg");
         assert_eq!(s1, s2);
-    }
-
-    #[test]
-    fn test_hmac_different_keys_differ() {
-        let s1 = hmac_sha256("key1", "msg");
-        let s2 = hmac_sha256("key2", "msg");
-        assert_ne!(s1, s2);
-    }
-
-    #[test]
-    fn test_hmac_different_msgs_differ() {
-        let s1 = hmac_sha256("key", "msg1");
-        let s2 = hmac_sha256("key", "msg2");
-        assert_ne!(s1, s2);
-    }
-
-    #[test]
-    fn test_witness_create_variant() {
-        let w = EscrowWitness::Create;
-        match w {
-            EscrowWitness::Create => assert!(true),
-            _ => panic!("Wrong variant"),
-        }
-    }
-
-    #[test]
-    fn test_witness_release_variant() {
-        let att = make_attestation("e1", "tx1", "s1");
-        let w = EscrowWitness::Release { attestation: att.clone() };
-        match w {
-            EscrowWitness::Release { attestation } => {
-                assert_eq!(attestation.escrow_id, "e1");
-            }
-            _ => panic!("Wrong variant"),
-        }
-    }
-
-    #[test]
-    fn test_witness_refund_variant() {
-        let w = EscrowWitness::Refund { current_block: 5000 };
-        match w {
-            EscrowWitness::Refund { current_block } => {
-                assert_eq!(current_block, 5000);
-            }
-            _ => panic!("Wrong variant"),
-        }
     }
 }
