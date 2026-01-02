@@ -25,15 +25,7 @@
     if (getToken()) {
       const stored = localStorage.getItem('wallet');
       if (stored) {
-        try {
-          // Validate token by making a test API call
-          await api.users.getProfile();
-          wallet.set(JSON.parse(stored));
-        } catch (error) {
-          // Token invalid, clear auth state
-          clearToken();
-          localStorage.removeItem('wallet');
-        }
+        wallet.set(JSON.parse(stored));
       }
     }
 
