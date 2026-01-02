@@ -42,8 +42,18 @@ pub struct Attestation {
     pub signature: String,
 }
 
-pub fn app_contract(_app: &App, _tx: &Transaction, _x: &Data, _w: &Data) -> bool {
-    true
+pub fn app_contract(app: &App, tx: &Transaction, _x: &Data, w: &Data) -> bool {
+    // Parse witness data safely
+    let witness: EscrowWitness = match w.value() {
+        Ok(w) => w,
+        Err(_) => return false,
+    };
+
+    match witness {
+        EscrowWitness::Create => validate_create(app, tx),
+        EscrowWitness::Release { attestation } => validate_release(app, tx, &attestation),
+        EscrowWitness::Refund { current_block } => validate_refund(app, tx, current_block),
+    }
 }
 
 fn validate_create(app: &App, tx: &Transaction) -> bool {
