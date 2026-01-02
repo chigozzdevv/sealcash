@@ -77,7 +77,7 @@ export class CharmsService {
         version: SPELL_VERSION,
         apps: { '$00': this.getAppString(escrowId) },
         ins: [],
-        outs: [{ address: outputAddress, charms: { '$00': escrow }, sats: 1000 }],
+        outs: [{ address: outputAddress, charms: { '$00': escrow.amount }, sats: 1000 }],
       },
       binaries: this.appBinary ? { [this.appVk]: this.appBinary } : {},
       prev_txs: prevTxHex ? [{ bitcoin: prevTxHex }] : [],
