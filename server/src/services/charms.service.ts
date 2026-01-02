@@ -43,10 +43,10 @@ export class CharmsService {
 
   private loadAppBinary(): void {
     const possiblePaths = [
-      path.join(process.cwd(), '../charms/target/release/seal'),
-      path.join(process.cwd(), 'charms/target/release/seal'),
-      path.join(__dirname, '../../../charms/target/release/seal'),
-      path.join(__dirname, '../../../../charms/target/release/seal'),
+      path.join(process.cwd(), '../charms/target/wasm32-wasip1/release/seal.wasm'),
+      path.join(process.cwd(), 'charms/target/wasm32-wasip1/release/seal.wasm'),
+      path.join(__dirname, '../../../charms/target/wasm32-wasip1/release/seal.wasm'),
+      path.join(__dirname, '../../../../charms/target/wasm32-wasip1/release/seal.wasm'),
     ];
 
     for (const binaryPath of possiblePaths) {
