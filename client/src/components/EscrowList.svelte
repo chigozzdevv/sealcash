@@ -83,11 +83,7 @@
         alert(`BTC locked successfully!\n\nCommit TX: ${commitTxId}\nSpell TX: ${spellTxId}`);
       } catch (proverErr: any) {
         console.error('Prover error:', proverErr);
-        
-        const txid = await sendBtcTransaction(escrow.sellerId, amountSats);
-        if (txid) {
-          alert(`BTC sent via simple transfer.\n\nTxID: ${txid}\n\nNote: Charms spell creation failed - ${proverErr.message}`);
-        }
+        throw new Error(`Charms spell creation failed: ${proverErr.message}`);
       }
       
       await loadEscrows();
