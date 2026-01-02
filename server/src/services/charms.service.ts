@@ -58,7 +58,8 @@ export class CharmsService {
   }
 
   getAppString(escrowId: string): string {
-    return `t/0000000000000000000000000000000000000000000000000000000000000000/0000000000000000000000000000000000000000000000000000000000000000`;
+    const appId = crypto.createHash('sha256').update(`sealcash-${escrowId}`).digest('hex');
+    return `e/${appId}/${this.appVk}`;
   }
 
   async createLockSpell(
@@ -76,9 +77,9 @@ export class CharmsService {
         version: SPELL_VERSION,
         apps: { '$00': this.getAppString(escrowId) },
         ins: [],
-        outs: [{ address: outputAddress, charms: { '$00': escrow.amount }, sats: 1000 }],
+        outs: [{ address: outputAddress, charms: { '$00': escrow }, sats: 1000 }],
       },
-      binaries: {},
+      binaries: this.appBinary ? { [this.appVk]: this.appBinary } : {},
       prev_txs: prevTxHex ? [{ bitcoin: prevTxHex }] : [],
       funding_utxo: fundingUtxo,
       funding_utxo_value: fundingValue,
