@@ -50,11 +50,14 @@ export class CharmsService {
     ];
 
     for (const binaryPath of possiblePaths) {
+      console.log(`Checking WASM path: ${binaryPath}`);
       if (fs.existsSync(binaryPath)) {
         this.appBinary = fs.readFileSync(binaryPath).toString('base64');
+        console.log(`Loaded WASM binary from: ${binaryPath}`);
         return;
       }
     }
+    console.log('No WASM binary found!');
   }
 
   getAppString(escrowId: string): string {
@@ -84,8 +87,7 @@ export class CharmsService {
       funding_utxo: fundingUtxo,
       funding_utxo_value: fundingValue,
       change_address: changeAddress,
-      fee_rate: 2,
-      private_inputs: { '$00': "Create" }
+      fee_rate: 2
     };
 
     try {
