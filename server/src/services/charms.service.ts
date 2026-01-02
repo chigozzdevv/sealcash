@@ -79,7 +79,7 @@ export class CharmsService {
         ins: [],
         outs: [{ address: outputAddress, charms: { '$00': escrow.amount }, sats: 1000 }],
       },
-      binaries: this.appBinary ? { [this.appVk]: this.appBinary } : {},
+      binaries: {},
       prev_txs: prevTxHex ? [{ bitcoin: prevTxHex }] : [],
       funding_utxo: fundingUtxo,
       funding_utxo_value: fundingValue,
