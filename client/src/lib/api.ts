@@ -30,6 +30,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   });
   
+  if (res.status === 401) {
+    clearToken();
+    const { wallet } = await import('@stores/wallet');
+    wallet.set({ connected: false, address: null, network: null });
+    localStorage.removeItem('wallet');
+    throw new Error('Session expired. Please reconnect your wallet.');
+  }
+  
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Request failed' }));
     throw new Error(err.error || 'Request failed');
