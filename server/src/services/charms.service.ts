@@ -87,11 +87,16 @@ export class CharmsService {
       private_inputs: { '$00': { Create: null } }
     };
 
-    const res = await axios.post(this.proverApi, body, { timeout: 600000 });
-    return { 
-      commitTx: res.data[0].bitcoin || res.data[0], 
-      spellTx: res.data[1].bitcoin || res.data[1] 
-    };
+    try {
+      const res = await axios.post(this.proverApi, body, { timeout: 600000 });
+      return { 
+        commitTx: res.data[0].bitcoin || res.data[0], 
+        spellTx: res.data[1].bitcoin || res.data[1] 
+      };
+    } catch (error: any) {
+      console.error('[CharmsService] createLockSpell error:', error.response?.data || error.message);
+      throw new Error(`Prover API error: ${JSON.stringify(error.response?.data || error.message)}`);
+    }
   }
 
   async createReleaseSpell(
@@ -121,11 +126,16 @@ export class CharmsService {
       private_inputs: { '$00': { Release: { attestation } } }
     };
 
-    const res = await axios.post(this.proverApi, body, { timeout: 600000 });
-    return { 
-      commitTx: res.data[0].bitcoin || res.data[0], 
-      spellTx: res.data[1].bitcoin || res.data[1] 
-    };
+    try {
+      const res = await axios.post(this.proverApi, body, { timeout: 600000 });
+      return { 
+        commitTx: res.data[0].bitcoin || res.data[0], 
+        spellTx: res.data[1].bitcoin || res.data[1] 
+      };
+    } catch (error: any) {
+      console.error('[CharmsService] createReleaseSpell error:', error.response?.data || error.message);
+      throw new Error(`Prover API error: ${JSON.stringify(error.response?.data || error.message)}`);
+    }
   }
 
   async createRefundSpell(
@@ -155,11 +165,16 @@ export class CharmsService {
       private_inputs: { '$00': { Refund: { current_block: currentBlock } } }
     };
 
-    const res = await axios.post(this.proverApi, body, { timeout: 600000 });
-    return { 
-      commitTx: res.data[0].bitcoin || res.data[0], 
-      spellTx: res.data[1].bitcoin || res.data[1] 
-    };
+    try {
+      const res = await axios.post(this.proverApi, body, { timeout: 600000 });
+      return { 
+        commitTx: res.data[0].bitcoin || res.data[0], 
+        spellTx: res.data[1].bitcoin || res.data[1] 
+      };
+    } catch (error: any) {
+      console.error('[CharmsService] createRefundSpell error:', error.response?.data || error.message);
+      throw new Error(`Prover API error: ${JSON.stringify(error.response?.data || error.message)}`);
+    }
   }
 
   generateAttestation(escrowId: string, txHash: string, signerKey: string): Attestation {
