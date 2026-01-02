@@ -43,7 +43,7 @@
       };
 
       const res = await api.escrow.create(data);
-      result = { inviteLink: res.inviteLink, escrowId: res.escrow._id };
+      result = { inviteLink: res.inviteLink, escrowId: res._id };
     } catch (e: any) {
       error = e.message;
     } finally {
