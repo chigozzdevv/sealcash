@@ -9,13 +9,13 @@
   import InboxDropdown from '@components/InboxDropdown.svelte';
   import InvitePage from '@components/InvitePage.svelte';
   import { wallet } from '@stores/wallet';
-  import { getToken } from '@lib/api';
+  import { getToken, clearToken } from '@lib/api';
 
   let showApp = window.location.pathname === '/app';
   let view: 'create' | 'history' = 'create';
   let inviteId: string | null = null;
 
-  onMount(() => {
+  onMount(async () => {
     const path = window.location.pathname;
     const match = path.match(/^\/invite\/([a-f0-9]+)$/i);
     if (match) {
@@ -25,7 +25,15 @@
     if (getToken()) {
       const stored = localStorage.getItem('wallet');
       if (stored) {
-        wallet.set(JSON.parse(stored));
+        try {
+          // Validate token by making a test API call
+          await api.users.getProfile();
+          wallet.set(JSON.parse(stored));
+        } catch (error) {
+          // Token invalid, clear auth state
+          clearToken();
+          localStorage.removeItem('wallet');
+        }
       }
     }
 
