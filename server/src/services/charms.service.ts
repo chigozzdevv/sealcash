@@ -85,7 +85,7 @@ export class CharmsService {
       funding_utxo_value: fundingValue,
       change_address: changeAddress,
       fee_rate: 2,
-      private_inputs: { '$00': { Create: null } }
+      private_inputs: { '$00': "Create" }
     };
 
     try {
@@ -125,7 +125,7 @@ export class CharmsService {
       funding_utxo_value: fundingValue,
       change_address: changeAddress,
       fee_rate: 2,
-      private_inputs: { '$00': { Release: { attestation } } }
+      private_inputs: { '$00': { "Release": { "attestation": attestation } } }
     };
 
     try {
@@ -165,7 +165,7 @@ export class CharmsService {
       funding_utxo_value: fundingValue,
       change_address: changeAddress,
       fee_rate: 2,
-      private_inputs: { '$00': { Refund: { current_block: currentBlock } } }
+      private_inputs: { '$00': { "Refund": { "current_block": currentBlock } } }
     };
 
     try {
