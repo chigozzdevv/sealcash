@@ -61,24 +61,14 @@
       const amountSats = Math.floor(parseFloat(escrow.btcAmount) * 1e8);
       const minRequired = amountSats + 2000;
       
-      const usedUtxos = JSON.parse(localStorage.getItem('usedUtxos') || '[]');
-      const availableUtxos = utxos.filter((u: any) => 
-        u.value >= minRequired && !usedUtxos.includes(`${u.txid}:${u.vout}`)
-      );
-      
-      if (!availableUtxos.length) throw new Error('No available UTXOs. Get fresh testnet BTC.');
-      
-      const fundingUtxo = availableUtxos[0];
-      const utxoId = `${fundingUtxo.txid}:${fundingUtxo.vout}`;
-      
-      usedUtxos.push(utxoId);
-      localStorage.setItem('usedUtxos', JSON.stringify(usedUtxos));
+      const fundingUtxo = utxos.find((u: any) => u.value >= minRequired);
+      if (!fundingUtxo) throw new Error(`Need at least ${minRequired} sats in a single UTXO`);
 
       const prevTxHex = await getRawTransaction(fundingUtxo.txid);
 
       try {
         const result = await api.escrow.lock(escrowId, {
-          fundingUtxo: utxoId,
+          fundingUtxo: `${fundingUtxo.txid}:${fundingUtxo.vout}`,
           fundingValue: fundingUtxo.value,
           prevTxHex,
           outputAddress: $wallet.address,
