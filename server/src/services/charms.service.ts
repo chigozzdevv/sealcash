@@ -58,8 +58,7 @@ export class CharmsService {
   }
 
   getAppString(escrowId: string): string {
-    const appId = crypto.createHash('sha256').update(`sealcash-${escrowId}`).digest('hex');
-    return `t/${appId}/${this.appVk}`;
+    return `t/0000000000000000000000000000000000000000000000000000000000000000/0000000000000000000000000000000000000000000000000000000000000000`;
   }
 
   async createLockSpell(
