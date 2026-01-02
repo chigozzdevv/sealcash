@@ -85,7 +85,7 @@ export class CharmsService {
       funding_utxo_value: fundingValue,
       change_address: changeAddress,
       fee_rate: 2,
-      private_inputs: { '$00': "Create" }
+      private_inputs: { '$00': { "Create": {} } }
     };
 
     try {
