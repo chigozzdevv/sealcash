@@ -166,6 +166,10 @@ cp .env.example .env
 Edit `.env`:
 
 ```env
+# Server
+PORT=3000
+CLIENT_URL=http://localhost:5173
+
 # Required
 MONGODB_URI=mongodb://localhost:27017/sealcash
 AUTH_SECRET=your-secret-key-min-32-chars-long

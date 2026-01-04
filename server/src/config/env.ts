@@ -14,6 +14,7 @@ function optional(key: string, fallback: string): string {
 export const env = {
   PORT: optional('PORT', '3000'),
   NODE_ENV: optional('NODE_ENV', 'development'),
+  CLIENT_URL: optional('CLIENT_URL', 'http://localhost:5173'),
   
   // Database
   MONGODB_URI: required('MONGODB_URI'),
