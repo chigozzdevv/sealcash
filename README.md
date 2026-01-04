@@ -6,32 +6,6 @@ Trade tokens/NFTs on any chain for BTC without trusting a third party. The escro
 
 ## How It Works
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                               ESCROW FLOW                                    │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  1. CREATE          2. ACCEPT          3. LOCK           4. COMPLETE        │
-│  ────────           ────────           ────────          ────────           │
-│                                                                              │
-│  Buyer creates      Seller reviews     Buyer locks       Seller sends       │
-│  escrow with        and accepts        BTC via           tokens, submits    │
-│  terms              the deal           Charms spell      tx hash as proof   │
-│                                                                              │
-│       │                  │                  │                  │            │
-│       ▼                  ▼                  ▼                  ▼            │
-│  ┌─────────┐       ┌─────────┐       ┌─────────┐       ┌─────────┐         │
-│  │ pending │ ────► │ accepted│ ────► │ locked  │ ────► │completed│         │
-│  └─────────┘       └─────────┘       └─────────┘       └─────────┘         │
-│                                           │                                 │
-│                                           │ timeout                         │
-│                                           ▼                                 │
-│                                     ┌──────────┐                            │
-│                                     │ refunded │                            │
-│                                     └──────────┘                            │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
 
 1. **Buyer** creates an escrow specifying: seller's BTC address, BTC amount, and the token/NFT they want
 2. **Seller** receives invite link, connects wallet, and accepts
